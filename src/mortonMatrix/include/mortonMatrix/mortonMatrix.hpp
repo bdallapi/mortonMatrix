@@ -4,27 +4,38 @@
 #include <vector>
 
 namespace mtmt {
-uint32_t coord2Z(uint16_t xPos, uint16_t yPos) {
-  // taken from http://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
-  static const uint32_t MASKS[] = {0x55555555, 0x33333333, 0x0F0F0F0F,
-                                   0x00FF00FF};
-  static const uint32_t SHIFTS[] = {1, 2, 4, 8};
+namespace detail {
+constexpr uint32_t MASKS[] = {0x55555555, 0x33333333, 0x0F0F0F0F, 0x00FF00FF,
+                              0x0000FFFF};
+constexpr uint32_t SHIFTS[] = {1, 2, 4, 8};
 
-  uint32_t x = xPos; // Interleave lower 16 bits of x and y, so the bits of x
-  uint32_t y = yPos; // are in the even positions and bits from y in the odd;
+inline uint16_t fromEvenBits(uint32_t z) {
+  z = z & MASKS[0];
+  z = (z | (z >> SHIFTS[0])) & MASKS[1];
+  z = (z | (z >> SHIFTS[1])) & MASKS[2];
+  z = (z | (z >> SHIFTS[2])) & MASKS[3];
+  z = (z | (z >> SHIFTS[3])) & MASKS[4];
+  return static_cast<uint16_t>(z);
+}
 
-  x = (x | (x << SHIFTS[3])) & MASKS[3];
-  x = (x | (x << SHIFTS[2])) & MASKS[2];
-  x = (x | (x << SHIFTS[1])) & MASKS[1];
-  x = (x | (x << SHIFTS[0])) & MASKS[0];
+inline uint32_t toEvenBits(uint16_t x) {
+  // taken from
+  // http://graphics.stanford.edu/~seander/bithacks.html#InterleaveBMN
+  uint32_t z = x;
+  z = (z | (z << SHIFTS[3])) & MASKS[3];
+  z = (z | (z << SHIFTS[2])) & MASKS[2];
+  z = (z | (z << SHIFTS[1])) & MASKS[1];
+  z = (z | (z << SHIFTS[0])) & MASKS[0];
+  return z;
+}
+}
 
-  y = (y | (y << SHIFTS[3])) & MASKS[3];
-  y = (y | (y << SHIFTS[2])) & MASKS[2];
-  y = (y | (y << SHIFTS[1])) & MASKS[1];
-  y = (y | (y << SHIFTS[0])) & MASKS[0];
+inline uint32_t coord2Z(uint16_t x, uint16_t y) {
+  return detail::toEvenBits(x) | (detail::toEvenBits(y) << 1);
+}
 
-  const uint32_t result = x | (y << 1);
-  return result;
+inline std::pair<uint16_t, uint16_t> z2Coord(uint32_t z) {
+  return std::make_pair(detail::fromEvenBits(z), detail::fromEvenBits(z >> 1));
 }
 
 template <typename T> void reorder(T *start, uint16_t M, uint16_t N) {
