@@ -4,4 +4,5 @@ project (mortonMatrix)
 set(CMAKE_CXX_STANDARD 14)
 
 add_subdirectory (mortonMatrix) 
+add_subdirectory (extern/gtest)
 
