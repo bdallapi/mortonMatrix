@@ -28,6 +28,17 @@ inline uint32_t toEvenBits(uint16_t x) {
   z = (z | (z << SHIFTS[0])) & MASKS[0];
   return z;
 }
+
+/// return the nearest power of 2 smaller than n.
+inline uint16_t floorlog2(uint16_t n)
+{
+    --n;
+    n |= n >> 1;
+    n |= n >> 2;
+    n |= n >> 4;
+    n |= n >> 8;
+    ++n;
+    return n >> 1;
 }
 
 inline uint32_t coord2Z(uint16_t x, uint16_t y) {
@@ -38,6 +49,20 @@ inline std::pair<uint16_t, uint16_t> z2Coord(uint32_t z) {
   return std::make_pair(detail::fromEvenBits(z), detail::fromEvenBits(z >> 1));
 }
 
+//TODO
+// to support arbitrary M*N matrix (not only power of 2), it is partitioned
+// into 3 blocks:
+// ----------
+// |A    |B |
+// |     |  |
+// ----------
+// |C       |
+// ----------
+// A: square Na*Na block with Na the grestest power of 2 smaller than min(N, M)
+// B: Na*(N-Na) matrix
+// C: (M-Na)*N matrix
+// The matrix A is ordered following Morton-order.
+// The matrices B and C are ordered following the same partitioning recursively.
 template <typename T> void reorder(T *start, uint16_t M, uint16_t N) {
   std::vector<std::tuple<T, uint16_t, uint16_t>> indexedMatrix(M * N);
   for (size_t i = 0; i < M; ++i) {
@@ -53,4 +78,6 @@ template <typename T> void reorder(T *start, uint16_t M, uint16_t N) {
   std::transform(indexedMatrix.begin(), indexedMatrix.end(), start,
                  [](auto tpl) { return std::get<0>(tpl); });
 }
-}
+
+} // namespace detail
+} // namespace mtmt
