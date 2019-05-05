@@ -30,53 +30,72 @@ inline uint32_t toEvenBits(uint16_t x) {
 }
 
 /// return the nearest power of 2 smaller than n.
-inline uint16_t floorlog2(uint16_t n)
-{
-    --n;
-    n |= n >> 1;
-    n |= n >> 2;
-    n |= n >> 4;
-    n |= n >> 8;
-    ++n;
-    return n >> 1;
+inline uint16_t floorlog2(uint16_t n) {
+  // special case if n is a power of 2.
+  if (n != 0 && !(n & (n - 1))) {
+    return n;
+  }
+  --n;
+  n |= n >> 1;
+  n |= n >> 2;
+  n |= n >> 4;
+  n |= n >> 8;
+  ++n;
+  return n >> 1;
 }
 
-inline uint32_t coord2Z(uint16_t x, uint16_t y) {
-  return detail::toEvenBits(x) | (detail::toEvenBits(y) << 1);
+inline uint32_t coord2Z(uint16_t i, uint16_t j) {
+  return (detail::toEvenBits(i) << 1) | detail::toEvenBits(j);
 }
 
 inline std::pair<uint16_t, uint16_t> z2Coord(uint32_t z) {
-  return std::make_pair(detail::fromEvenBits(z), detail::fromEvenBits(z >> 1));
+  return std::make_pair(detail::fromEvenBits(z >> 1), detail::fromEvenBits(z));
 }
 
-//TODO
-// to support arbitrary M*N matrix (not only power of 2), it is partitioned
-// into 3 blocks:
+// reorder a MxN matrix (leading dimension N) in Z-order.
+// to support arbitrary M*N matrix (not only power of 2), the matrix is
+// partitioned into 3 blocks:
 // ----------
 // |A    |B |
 // |     |  |
 // ----------
 // |C       |
 // ----------
-// A: square Na*Na block with Na the grestest power of 2 smaller than min(N, M)
+// A: square Na*Na block with Na the greatest power of 2 smaller than min(N, M)
 // B: Na*(N-Na) matrix
 // C: (M-Na)*N matrix
 // The matrix A is ordered following Morton-order.
 // The matrices B and C are ordered following the same partitioning recursively.
 template <typename T> void reorder(T *start, uint16_t M, uint16_t N) {
-  std::vector<std::tuple<T, uint16_t, uint16_t>> indexedMatrix(M * N);
-  for (size_t i = 0; i < M; ++i) {
-    for (size_t j = 0; j < N; ++j) {
-      indexedMatrix[i * N + j] = std::make_tuple(start[i * N + j], i, j);
+  if (!(M * N)) {
+    return;
+  }
+
+  uint16_t Na = floorlog2(std::min(M, N));
+
+  std::vector<T> blockMatrix(N * M);
+  for (uint16_t i = 0; i < Na; ++i) {
+    for (uint16_t j = 0; j < Na; ++j) {
+      blockMatrix[coord2Z(i, j)] = start[i * N + j];
     }
   }
-  std::sort(indexedMatrix.begin(), indexedMatrix.end(), [](auto lhs, auto rhs) {
-    return coord2Z(std::get<1>(lhs), std::get<2>(lhs)) <
-           coord2Z(std::get<1>(rhs), std::get<2>(rhs));
-  });
 
-  std::transform(indexedMatrix.begin(), indexedMatrix.end(), start,
-                 [](auto tpl) { return std::get<0>(tpl); });
+  for (uint16_t i = 0; i < Na; ++i) {
+    for (uint16_t j = Na; j < N; ++j) {
+      blockMatrix[Na * Na + i * (N - Na) + j - Na] = start[i * N + j];
+    }
+  }
+  reorder(blockMatrix.data() + Na * Na, Na, N - Na);
+
+  for (uint16_t i = Na; i < M; ++i) {
+    for (uint16_t j = 0; j < N; ++j) {
+      blockMatrix[Na * Na + Na * (N - Na) + (i - Na) * N + j] =
+          start[i * N + j];
+    }
+  }
+  reorder(blockMatrix.data() + Na * Na + Na * (N - Na), M - Na, N);
+
+  std::copy(blockMatrix.begin(), blockMatrix.end(), start);
 }
 
 } // namespace detail
